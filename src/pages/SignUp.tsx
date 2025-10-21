@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Database } from "lucide-react";
 import { toast } from "sonner";
+import { signUp, getCurrentUser } from "@/lib/auth";
 
 const SignUp = () => {
   const navigate = useNavigate();
@@ -13,16 +14,45 @@ const SignUp = () => {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    const checkAuth = async () => {
+      const user = await getCurrentUser();
+      if (user) {
+        navigate("/connect");
+      }
+    };
+    checkAuth();
+  }, [navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!name || !email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
     setIsLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      toast.success("Account created successfully!");
-      navigate("/");
+    const { user, error } = await signUp(name, email, password);
+    
+    if (error) {
+      toast.error(error);
       setIsLoading(false);
-    }, 1000);
+      return;
+    }
+
+    if (user) {
+      toast.success("Account created successfully!");
+      navigate("/connect");
+    }
+    
+    setIsLoading(false);
   };
 
   return (
