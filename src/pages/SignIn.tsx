@@ -15,13 +15,29 @@ const SignIn = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
+
+    try {
+      const response = await fetch("http://localhost:5000/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+        credentials: "include", // Include cookies in the request
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Login failed");
+      }
+
       toast.success("Signed in successfully!");
-      navigate("/");
+      navigate("/"); // Redirect to the home page or dashboard
+    } catch (error) {
+      toast.error(error.message || "An error occurred");
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
