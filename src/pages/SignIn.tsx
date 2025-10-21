@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Database } from "lucide-react";
 import { toast } from "sonner";
-import { signIn, getCurrentUser } from "@/lib/auth";
 
 const SignIn = () => {
   const navigate = useNavigate();
@@ -13,40 +12,16 @@ const SignIn = () => {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const user = await getCurrentUser();
-      if (user) {
-        navigate("/connect");
-      }
-    };
-    checkAuth();
-  }, [navigate]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!email || !password) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
     setIsLoading(true);
     
-    const { user, error } = await signIn(email, password);
-    
-    if (error) {
-      toast.error(error);
-      setIsLoading(false);
-      return;
-    }
-
-    if (user) {
+    // Simulate API call
+    setTimeout(() => {
       toast.success("Signed in successfully!");
-      navigate("/connect");
-    }
-    
-    setIsLoading(false);
+      navigate("/");
+      setIsLoading(false);
+    }, 1000);
   };
 
   return (
