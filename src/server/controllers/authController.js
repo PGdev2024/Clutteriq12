@@ -30,7 +30,7 @@ const signup = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Generate user ID
-        const userId = randomUUID();
+        const userId = randomUUID().toString();
 
         // Insert new user
         const { data, error } = await supabase
@@ -151,3 +151,4 @@ const me = async (req, res) => {
 };
 
 module.exports = { signup, login, logout, me };
+
