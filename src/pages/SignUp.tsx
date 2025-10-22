@@ -14,17 +14,37 @@ const SignUp = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      toast.success("Account created successfully!");
-      navigate("/");
-      setIsLoading(false);
-    }, 1000);
-  };
+  e.preventDefault();
+  setIsLoading(true);
+  
+  try {
+    const response = await fetch('http://localhost:5000/api/signup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+      }),
+    });
 
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Signup failed');
+    }
+
+    toast.success("Account created successfully!");
+    navigate("/dashboard"); // or wherever you want to redirect
+  } catch (error) {
+    toast.error(error.message || "Failed to create account");
+  } finally {
+    setIsLoading(false);
+  }
+};
   return (
     <div className="min-h-screen flex">
       {/* Left side - Gradient */}
