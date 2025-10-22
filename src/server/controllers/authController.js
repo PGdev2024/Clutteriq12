@@ -1,75 +1,122 @@
 // controllers/authController.js
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { randomUUID } = require('crypto');
 const supabase = require('../db/supabaseClient');
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here'; // Fallback for development
 
 const signup = async (req, res) => {
-    const { email, name, password } = req.body;
+    try {
+        const { email, name, password } = req.body;
 
-    // Validate inputs
-    if (!email || !name || !password) {
-        return res.status(400).json({ message: 'All fields are required' });
+        // Validate inputs
+        if (!email || !name || !password) {
+            return res.status(400).json({ message: 'All fields are required' });
+        }
+
+        // Check if email already exists
+        const { data: existingUser } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .maybeSingle(); // Use maybeSingle instead of single to avoid error if not found
+
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email already exists' });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Generate user ID
+        const userId = randomUUID();
+
+        // Insert new user
+        const { data, error } = await supabase
+            .from('users')
+            .insert([{ id: userId, email, name, password: hashedPassword }])
+            .select() // Add .select() to return the inserted data
+            .single();
+
+        if (error) {
+            console.error('Supabase error:', error);
+            return res.status(500).json({ message: 'Error creating user', error: error.message });
+        }
+
+        // Create JWT
+        const token = jwt.sign({ id: data.id, email: data.email }, JWT_SECRET, { expiresIn: '7d' });
+
+        // Set HTTP-only cookie
+        res.cookie('token', token, { 
+            httpOnly: true, 
+            secure: process.env.NODE_ENV === 'production', // Only secure in production
+            sameSite: 'lax', // Changed from 'Strict' to 'lax'
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        });
+        
+        res.status(201).json({ 
+            message: 'User created successfully',
+            user: {
+                id: data.id,
+                name: data.name,
+                email: data.email
+            }
+        });
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
-
-    // Check if email already exists
-    const { data: existingUser, error: emailError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .single();
-
-    if (existingUser) {
-        return res.status(400).json({ message: 'Email already exists' });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Insert new user
-    const { data, error } = await supabase
-        .from('users')
-        .insert([{ id: crypto.randomUUID(), email, name, password: hashedPassword }]);
-
-    if (error) {
-        return res.status(500).json({ message: 'Error creating user' });
-    }
-
-    // Create JWT
-    const token = jwt.sign({ id: data[0].id }, JWT_SECRET, { expiresIn: '1h' });
-
-    // Set HTTP-only cookie
-    res.cookie('token', token, { httpOnly: true, secure: true, sameSite: 'Strict' });
-    res.status(201).json({ message: 'User created successfully' });
 };
 
 const login = async (req, res) => {
-    const { email, password } = req.body;
+    try {
+        const { email, password } = req.body;
 
-    // Check if user exists
-    const { data: user, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .single();
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Email and password are required' });
+        }
 
-    if (!user || error) {
-        return res.status(401).json({ message: 'Invalid credentials' });
+        // Check if user exists
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .maybeSingle();
+
+        if (!user || error) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        // Compare password
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        // Create JWT
+        const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+
+        // Set HTTP-only cookie
+        res.cookie('token', token, { 
+            httpOnly: true, 
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        });
+        
+        res.status(200).json({ 
+            message: 'Login successful',
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
-
-    // Compare password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    // Create JWT
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1h' });
-
-    // Set HTTP-only cookie
-    res.cookie('token', token, { httpOnly: true, secure: true, sameSite: 'Strict' });
-    res.status(200).json({ message: 'Login successful' });
 };
 
 const logout = (req, res) => {
@@ -78,26 +125,27 @@ const logout = (req, res) => {
 };
 
 const me = async (req, res) => {
-    const token = req.cookies.token;
-
-    if (!token) {
-        return res.status(401).json({ message: 'Unauthorized' });
-    }
-
     try {
+        const token = req.cookies.token;
+
+        if (!token) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
+
         const decoded = jwt.verify(token, JWT_SECRET);
         const { data: user, error } = await supabase
             .from('users')
-            .select('*')
+            .select('id, email, name, created_at')
             .eq('id', decoded.id)
             .single();
 
-        if (error) {
+        if (error || !user) {
             return res.status(401).json({ message: 'Unauthorized' });
         }
 
         res.status(200).json(user);
     } catch (err) {
+        console.error('Me error:', err);
         return res.status(401).json({ message: 'Unauthorized' });
     }
 };
